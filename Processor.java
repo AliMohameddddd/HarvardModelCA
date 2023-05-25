@@ -3,8 +3,8 @@ import java.util.Arrays;
 
 class Processor {
 	  protected Register[] registers;
-	  private InstructionMemory instructionMemory;
-	  protected String[]mips;
+	  protected InstructionMemory instructionMemory;
+	
 	  private DataMemory dataMemory;
 	  private int programCounter;
 	  protected StatusRegister statusRegister;
@@ -21,6 +21,7 @@ class Processor {
 	  protected int R2Addressexec;
 	  protected String type;
 	  protected ALU myALU;
+	  protected Instruction toBeDecoded;
 
 	  public Processor() {
 	    registers = new Register[66];
@@ -36,89 +37,33 @@ class Processor {
 	    }
 	  }
 	  
-	  public String fetch() {
-		if (programCounter >= mips.length) {
-			return "null";
-		}
-	
-		String[] parts = mips[programCounter].split(" ");
-		String opcode = parts[0];
-		String bits = "";
-	
-		switch (opcode) {
-			case "ADD":
-			case "SUB":
-			case "MUL":
-			case "EOR":
-			case "BR":
-				bits += getOpcodeBits(opcode);
-				bits += getRegisterBits(parts[1]);
-				bits += getRegisterBits(parts[2]);
-				break;
-			case "MOVI":
-			case "BEQZ":
-			case "ANDI":
-			case "SAL":
-			case "SAR":
-			case "LDR":
-			case "STR":
-				bits += getOpcodeBits(opcode);
-				bits += getRegisterBits(parts[1]);
-				bits += getImmediateBits(parts[2]);
-				break;
-			default:
-				throw new IllegalArgumentException("Invalid opcode: " + opcode);
-		}
-	
-		return bits;
+	  public Instruction fetch() {
+           toBeDecoded=this.instructionMemory.getInstructionMemory()[programCounter];
+		programCounter++;
+		return   toBeDecoded;
+
+		
 	}
 	
-	private static String getOpcodeBits(String opcode) {
-		int opcodeValue = Arrays.asList("ADD", "SUB", "MUL", "MOVI", "BEQZ", "ANDI","EOR", "BR", "SAL", "SAR", "LDR", "STR")
-				.indexOf(opcode);
 	
-		return padZeros(Integer.toBinaryString(opcodeValue), 4);
-	}
-	
-	private static String getRegisterBits(String register) {
-		int registerValue = Integer.parseInt(register.substring(1));
-		if (registerValue < 0 || registerValue > 65) {
-			throw new IllegalArgumentException("Invalid register: " + register);
-		}
-	
-		return padZeros(Integer.toBinaryString(registerValue), 6);
-	}
-	
-	private static String getImmediateBits(String immediate) {
-		int immediateValue = Integer.parseInt(immediate);
-		if (immediateValue < 0 || immediateValue > 63) {
-			throw new IllegalArgumentException("Invalid immediate value: " + immediate);
-		}
-	
-		return padZeros(Integer.toBinaryString(immediateValue), 6);
-	}
-	
-	private static String padZeros(String binaryString, int numBits) {
-		StringBuilder paddedString = new StringBuilder(binaryString);
-		while (paddedString.length() < numBits) {
-			paddedString.insert(0, '0');
-		}
-		return paddedString.toString();
-	}
 	
 	private void decode() {
+		this.opcodeexec= this.opcode;
+	    	this.R1Addressexec = this.R1Address;
+	    	this.R2orIMMexec = this.R2orIMM;
+	    	this.R1exec = this.R1;
 		int address = this.instructionMemory.lastInstruction - 1;
 		if (address >= 0) {
 			Instruction instruction = this.instructionMemory.readInstruction(address);
-			this.opcodeexec = (instruction.instructionBits & 0b1111000000000000) >>> 12;
+			this.opcode = (instruction.instructionBits & 0b1111000000000000) >>> 12;
 			int r1Address = (instruction.instructionBits & 0b0000111111000000) >>> 6;
-			this.R1Addressexec = r1Address;
-			this.R1exec = this.registers[r1Address].getValue();
-			this.R2orIMMexec = instruction.instructionBits & 0b0000000000111111;
+			
+			this.R1 = this.registers[r1Address].getValue();
+			this.R2orIMM = instruction.instructionBits & 0b0000000000111111;
 	
-			if (opcodeexec >= 0 && opcodeexec < 3 || opcodeexec >= 6 && opcodeexec < 8) {
-				this.R2Address = this.R2orIMMexec;
-				this.R2orIMMexec = this.registers[this.R2orIMMexec].getValue();
+			if (opcode >= 0 && opcode < 3 || opcode >= 6 && opcode < 8) {
+				this.R2Address = this.R2orIMM;
+				this.R2orIMM = this.registers[this.R2orIMM].getValue();
 				this.type = "R";
 			} else {
 				this.R2Address = -1;
@@ -208,29 +153,24 @@ class Processor {
 	}
 
 	public void runPipeline() {
-		int instructionCount = mips.length;
-		int cycles = instructionCount + 2;
-		int clockCycle = 1;
-	
+		int instructionCount = instructionMemory. lastInstruction;
+		int cycles = instructionCount + 2;	
+
 		for (int cycle = 1; cycle <= cycles; cycle++) {
 			System.out.println("Cycle " + cycle);
 	        
 			if (cycle <= instructionCount && programCounter <= instructionCount) {
-				String instructionName = mips[programCounter];
-				System.out.println("Instruction " + programCounter + " (" + instructionName + ")");
-				String fetchOutput = fetch();
-				int instructionBits = Integer.parseInt(fetchOutput, 2);
-				Instruction instruction = new Instruction(instructionBits);	
-				InstructionMemory instructionMemory = new InstructionMemory();
-                instructionMemory.writeInstruction(instruction);
-				System.out.println("Fetch: " + fetchOutput);
+			  Instruction M=fetch();
+
+
+				System.out.println("Fetch: " + M.instructionBits);
 
 				
 			}
 	
 			// Instruction Decode stage
 			if (cycle > 1 && cycle <= instructionCount + 1 && programCounter - 1 >= 0) {
-				String instructionName = mips[programCounter - 1];
+				int instructionName = this.instructionMemory.getInstructionMemory()[programCounter - 1].instructionBits;
 			 
 				System.out.println("Instruction " + (programCounter - 1) + " (" + instructionName + ")");
 				decode();
@@ -239,14 +179,14 @@ class Processor {
 	
 			// Execute stage
 			if (cycle > 2 && cycle <= instructionCount + 2 && programCounter - 2 >= 0) {
-				String instructionName = mips[programCounter - 2];
+				int instructionName =this.instructionMemory.getInstructionMemory()[programCounter - 2].instructionBits;
 				System.out.println("Instruction " + (programCounter - 2) + " (" + instructionName + ")");
 				System.out.println("Execute:");
 				execute();
 			}
 	
 			System.out.println();
-			programCounter++;
+			
 		}
 	
 	}
